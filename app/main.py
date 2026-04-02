@@ -2,10 +2,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio
 
 from app.core.config import get_settings
 from app.api.v1.router import api_router
 from app.db.session import engine
+from app.jobs.worker import start_kafka_worker
+from app.jobs.producer import stop_producer
 
 settings = get_settings()
 
@@ -14,9 +17,11 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle hook."""
     # ── Startup ──────────────────────────────────────────
-    # Engine is already created; nothing extra needed for now.
+    worker_task = asyncio.create_task(start_kafka_worker())
     yield
     # ── Shutdown ─────────────────────────────────────────
+    worker_task.cancel()
+    await stop_producer()
     await engine.dispose()
 
 

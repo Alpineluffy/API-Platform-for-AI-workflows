@@ -3,6 +3,8 @@ from openai import AsyncOpenAI
 from app.core.config import get_settings
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.embeddings import EmbeddingRequest, EmbeddingResponse
+import json
+from typing import AsyncGenerator
 
 settings = get_settings()
 
@@ -31,6 +33,27 @@ class LLMService:
         # AsyncOpenAI v1+ returns Pydantic-like objects, we need to convert them to our internal schemas
         # or we could've just returned their schema directly, but keeping our own contract is safer for decoupling.
         return ChatResponse.model_validate(response.model_dump())
+
+    @staticmethod
+    async def stream_chat_completion(request: ChatRequest) -> AsyncGenerator[str, None]:
+        """Generate a streaming chat completion yielding SSE strings."""
+        messages = [{"role": msg.role.value, "content": msg.content} for msg in request.messages]
+        
+        response_stream = await client.chat.completions.create(
+            model=request.model.value,
+            messages=messages,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            top_p=request.top_p,
+            stream=True,
+        )
+        
+        async for chunk in response_stream:
+            # Yield Server-Sent Event (SSE) formatted text
+            yield f"data: {chunk.model_dump_json()}\n\n"
+        
+        # Standard closing event for OpenAI streaming compatibility
+        yield "data: [DONE]\n\n"
 
     @staticmethod
     async def generate_embeddings(request: EmbeddingRequest) -> EmbeddingResponse:

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.llm_service import LLMService
@@ -10,13 +11,13 @@ router = APIRouter(tags=["Chat"])
 async def create_chat_completion(request: ChatRequest):
     """
     Generate a chat completion.
-    Streaming is currently disabled (handled via Phase 3 streaming endpoints).
+    Automatically handles streaming if request.stream == True.
     """
     try:
         if request.stream:
-            raise HTTPException(
-                status_code=400, 
-                detail="Streaming requests must use the streaming endpoint (coming soon)."
+            return StreamingResponse(
+                LLMService.stream_chat_completion(request), 
+                media_type="text/event-stream"
             )
             
         return await LLMService.generate_chat_completion(request)
